@@ -2,209 +2,141 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>2 Detector de Pokémon (Pikachu x Charmander) v2</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+  <title>1-1 Detector de Pokémon</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
-      background: #f0f0f0;
-    }
-    #controls {
       margin: 20px;
     }
-    #result {
-      margin-top: 15px;
-      font-size: 1.3em;
-      font-weight: bold;
+    #preview {
+      max-width: 200px;
+      margin-top: 10px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
     }
-    #error {
-      margin-top: 15px;
-      font-size: 1em;
-      font-weight: bold;
-      color: red;
+    #label-container {
+      margin-top: 20px;
+      font-size: 16px;
     }
-    #preview, #webcam-container canvas, #snapshot {
-      margin-top: 15px;
-      border: 2px solid #333;
-      border-radius: 10px;
+    button {
+      margin: 10px;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <h1>Detector de Pokémon</h1>
-  <p>Suba uma imagem ou use a câmera para identificar Pikachu, Charmander ou Outro Pokémon.</p>
+  <h2>Detector de Pokémon (Pikachu vs Charmander)</h2>
 
-  <div id="controls">
-    <input type="file" id="imageUpload" accept="image/*">
-    <br><br>
-    <button onclick="initWebcam()">Abrir Câmera (tempo real)</button>
-    <button onclick="stopWebcam()">Fechar Câmera</button>
-    <br><br>
-    <button onclick="captureSnapshot()">📸 Tirar Foto</button>
-  </div>
-
-  <div id="preview-container">
-    <img id="preview" width="200" style="display:none;">
-    <canvas id="snapshot" width="200" height="200" style="display:none;"></canvas>
+  <div>
+    <button type="button" onclick="initWebcam()">Abrir Câmera</button>
+    <input type="file" accept="image/*" onchange="handleUpload(event)">
   </div>
 
   <div id="webcam-container"></div>
-  <div id="result"></div>
-  <div id="error"></div>
+  <img id="preview" alt="Prévia da imagem escolhida" />
+
   <div id="label-container"></div>
 
+  <!-- Scripts do Teachable Machine -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
   <script>
-    const URL = "./my_model/"; // ajuste se precisar
-    let model, webcam, labelContainer, maxPredictions, loopActive = false;
+    // Caminho do modelo (ajuste se necessário)
+    const URL = "./my_model/";
 
-    // Função auxiliar para mostrar erros
-    function showError(message) {
-      document.getElementById("error").innerText = "⚠️ " + message;
-      console.error(message);
-    }
+    let model, webcam, labelContainer, maxPredictions;
 
-    function clearError() {
-      document.getElementById("error").innerText = "";
-    }
-
-    // carregar modelo
+    // Carrega o modelo
     async function loadModel() {
+      if (model) return model; // já carregado
+      const modelURL = URL + "model.json";
+      const metadataURL = URL + "metadata.json";
       try {
-        if (!model) {
-          const modelURL = URL + "model.json";
-          const metadataURL = URL + "metadata.json";
-          model = await tmImage.load(modelURL, metadataURL);
-          maxPredictions = model.getTotalClasses();
-          labelContainer = document.getElementById("label-container");
-          labelContainer.innerHTML = "";
-          for (let i = 0; i < maxPredictions; i++) {
-            labelContainer.appendChild(document.createElement("div"));
-          }
-        }
+        model = await tmImage.load(modelURL, metadataURL);
+        maxPredictions = model.getTotalClasses();
+        labelContainer = document.getElementById("label-container");
+        return model;
       } catch (err) {
-        showError("Erro ao carregar o modelo. Verifique se a pasta 'my_model' está no mesmo nível do index.html.");
+        alert("⚠️ Erro ao carregar o modelo. Verifique se a pasta 'my_model' está no lugar certo.");
+        console.error(err);
       }
     }
 
-    // Upload de imagem
-    document.getElementById("imageUpload").addEventListener("change", async (event) => {
-      clearError();
-      const file = event.target.files[0];
-      if (!file) {
-        showError("Nenhuma imagem selecionada.");
-        return;
-      }
-
-      await loadModel();
-      if (!model) return; // não carregou
-
-      const img = document.getElementById("preview");
-      img.src = URL.createObjectURL(file);
-      img.style.display = "block";
-      document.getElementById("snapshot").style.display = "none";
-
-      img.onload = async () => {
-        try {
-          const prediction = await model.predict(img);
-          showResults(prediction);
-        } catch (err) {
-          showError("Erro ao processar a imagem.");
-        }
-      };
-    });
-
-    // Webcam em tempo real
+    // Inicia a webcam
     async function initWebcam() {
-      clearError();
       await loadModel();
-      if (!model) return;
-
-      try {
-        loopActive = true;
-        const flip = true;
-        webcam = new tmImage.Webcam(200, 200, flip);
-        await webcam.setup();
-        await webcam.play();
-        document.getElementById("webcam-container").innerHTML = "";
-        document.getElementById("webcam-container").appendChild(webcam.canvas);
-        window.requestAnimationFrame(loop);
-      } catch (err) {
-        showError("Erro ao acessar a câmera. Verifique as permissões.");
-      }
+      const flip = true;
+      webcam = new tmImage.Webcam(200, 200, flip);
+      await webcam.setup();
+      await webcam.play();
+      window.requestAnimationFrame(loop);
+      document.getElementById("webcam-container").innerHTML = "";
+      document.getElementById("webcam-container").appendChild(webcam.canvas);
     }
 
     async function loop() {
-      if (!loopActive) return;
       webcam.update();
-      try {
-        const prediction = await model.predict(webcam.canvas);
-        showResults(prediction);
-      } catch (err) {
-        showError("Erro ao processar a câmera.");
-      }
+      await predict(webcam.canvas);
       window.requestAnimationFrame(loop);
     }
 
-    function stopWebcam() {
-      if (webcam) {
-        loopActive = false;
-        webcam.stop();
-        document.getElementById("webcam-container").innerHTML = "";
-      }
-    }
+    // Predição genérica (webcam ou imagem)
+    async function predict(input) {
+      if (!model) return;
+      const prediction = await model.predict(input);
 
-    // Tirar uma foto da câmera
-    async function captureSnapshot() {
-      clearError();
-      if (!webcam) {
-        showError("Primeiro abra a câmera!");
-        return;
-      }
-      stopWebcam();
-      const snapshotCanvas = document.getElementById("snapshot");
-      const ctx = snapshotCanvas.getContext("2d");
-      ctx.drawImage(webcam.canvas, 0, 0, 200, 200);
-      snapshotCanvas.style.display = "block";
-      document.getElementById("preview").style.display = "none";
+      // limpa resultados
+      labelContainer.innerHTML = "";
 
-      try {
-        const prediction = await model.predict(snapshotCanvas);
-        showResults(prediction);
-      } catch (err) {
-        showError("Erro ao analisar a foto da câmera.");
-      }
-    }
-
-    // Mostrar resultados
-    function showResults(prediction) {
-      clearError();
-      let bestClass = prediction[0];
+      // acha melhor resultado
+      let best = prediction[0];
       for (let i = 1; i < prediction.length; i++) {
-        if (prediction[i].probability > bestClass.probability) {
-          bestClass = prediction[i];
+        if (prediction[i].probability > best.probability) {
+          best = prediction[i];
         }
       }
 
-      let resultText;
-      if (bestClass.className.toLowerCase().includes("pikachu")) {
-        resultText = "🔎 Detectado: Pikachu ⚡";
-      } else if (bestClass.className.toLowerCase().includes("charmander")) {
-        resultText = "🔎 Detectado: Charmander 🔥";
-      } else {
-        resultText = "❓ Outro Pokémon";
+      // mostra resultado principal
+      const resultText = document.createElement("div");
+      resultText.style.fontSize = "20px";
+      resultText.style.fontWeight = "bold";
+      resultText.textContent =
+        `Resultado: ${best.className} (${(best.probability * 100).toFixed(1)}%)`;
+      labelContainer.appendChild(resultText);
+
+      // mostra todas probabilidades
+      prediction.forEach(p => {
+        const classPrediction = document.createElement("div");
+        classPrediction.textContent =
+          `${p.className}: ${(p.probability * 100).toFixed(1)}%`;
+        labelContainer.appendChild(classPrediction);
+      });
+    }
+
+    // Upload de imagem
+    async function handleUpload(event) {
+      const file = event.target.files[0];
+      if (!file) {
+        alert("⚠️ Nenhuma imagem selecionada.");
+        return;
       }
 
-      document.getElementById("result").innerText = resultText;
+      await loadModel();
+      const img = document.getElementById("preview");
+      img.src = URL.createObjectURL(file);
 
-      prediction.forEach((p, i) => {
-        labelContainer.childNodes[i].innerHTML =
-          `${p.className}: ${(p.probability * 100).toFixed(1)}%`;
-      });
+      img.onload = async () => {
+        await predict(img);
+      };
     }
   </script>
 </body>
 </html>
+
+
 
 
