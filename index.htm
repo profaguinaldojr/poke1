@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Detector de Pokémon</title>
+  <title>1.3 Detector de Pokémon</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -120,7 +120,7 @@
       });
     }
 
-    // Mostra preview da imagem e guarda para analisar depois
+    // Mostra preview da imagem e só define como selecionada após carregar
     function showPreview(event) {
       const file = event.target.files[0];
       if (!file) {
@@ -130,7 +130,11 @@
       const img = document.getElementById("preview");
       img.src = URL.createObjectURL(file);
       img.style.display = "block";
-      imagemSelecionada = img;
+
+      img.onload = () => {
+        imagemSelecionada = img; // só depois que a imagem carregou
+        console.log("Imagem carregada e pronta para análise");
+      };
     }
 
     // Só analisa depois de clicar no botão
