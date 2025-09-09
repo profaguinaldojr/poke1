@@ -19,6 +19,12 @@
       font-size: 1.3em;
       font-weight: bold;
     }
+    #error {
+      margin-top: 15px;
+      font-size: 1em;
+      font-weight: bold;
+      color: red;
+    }
     #preview, #webcam-container canvas, #snapshot {
       margin-top: 15px;
       border: 2px solid #333;
@@ -46,33 +52,53 @@
 
   <div id="webcam-container"></div>
   <div id="result"></div>
+  <div id="error"></div>
   <div id="label-container"></div>
 
   <script>
-    const URL = "./my_model/"; // ajuste para o caminho do seu modelo
+    const URL = "./my_model/"; // ajuste se precisar
     let model, webcam, labelContainer, maxPredictions, loopActive = false;
+
+    // Função auxiliar para mostrar erros
+    function showError(message) {
+      document.getElementById("error").innerText = "⚠️ " + message;
+      console.error(message);
+    }
+
+    function clearError() {
+      document.getElementById("error").innerText = "";
+    }
 
     // carregar modelo
     async function loadModel() {
-      if (!model) {
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
-        model = await tmImage.load(modelURL, metadataURL);
-        maxPredictions = model.getTotalClasses();
-        labelContainer = document.getElementById("label-container");
-        labelContainer.innerHTML = "";
-        for (let i = 0; i < maxPredictions; i++) {
-          labelContainer.appendChild(document.createElement("div"));
+      try {
+        if (!model) {
+          const modelURL = URL + "model.json";
+          const metadataURL = URL + "metadata.json";
+          model = await tmImage.load(modelURL, metadataURL);
+          maxPredictions = model.getTotalClasses();
+          labelContainer = document.getElementById("label-container");
+          labelContainer.innerHTML = "";
+          for (let i = 0; i < maxPredictions; i++) {
+            labelContainer.appendChild(document.createElement("div"));
+          }
         }
+      } catch (err) {
+        showError("Erro ao carregar o modelo. Verifique se a pasta 'my_model' está no mesmo nível do index.html.");
       }
     }
 
     // Upload de imagem
     document.getElementById("imageUpload").addEventListener("change", async (event) => {
+      clearError();
       const file = event.target.files[0];
-      if (!file) return;
+      if (!file) {
+        showError("Nenhuma imagem selecionada.");
+        return;
+      }
 
       await loadModel();
+      if (!model) return; // não carregou
 
       const img = document.getElementById("preview");
       img.src = URL.createObjectURL(file);
@@ -80,30 +106,44 @@
       document.getElementById("snapshot").style.display = "none";
 
       img.onload = async () => {
-        const prediction = await model.predict(img);
-        showResults(prediction);
+        try {
+          const prediction = await model.predict(img);
+          showResults(prediction);
+        } catch (err) {
+          showError("Erro ao processar a imagem.");
+        }
       };
     });
 
     // Webcam em tempo real
     async function initWebcam() {
+      clearError();
       await loadModel();
-      loopActive = true;
+      if (!model) return;
 
-      const flip = true;
-      webcam = new tmImage.Webcam(200, 200, flip);
-      await webcam.setup();
-      await webcam.play();
-      document.getElementById("webcam-container").innerHTML = "";
-      document.getElementById("webcam-container").appendChild(webcam.canvas);
-      window.requestAnimationFrame(loop);
+      try {
+        loopActive = true;
+        const flip = true;
+        webcam = new tmImage.Webcam(200, 200, flip);
+        await webcam.setup();
+        await webcam.play();
+        document.getElementById("webcam-container").innerHTML = "";
+        document.getElementById("webcam-container").appendChild(webcam.canvas);
+        window.requestAnimationFrame(loop);
+      } catch (err) {
+        showError("Erro ao acessar a câmera. Verifique as permissões.");
+      }
     }
 
     async function loop() {
       if (!loopActive) return;
       webcam.update();
-      const prediction = await model.predict(webcam.canvas);
-      showResults(prediction);
+      try {
+        const prediction = await model.predict(webcam.canvas);
+        showResults(prediction);
+      } catch (err) {
+        showError("Erro ao processar a câmera.");
+      }
       window.requestAnimationFrame(loop);
     }
 
@@ -117,23 +157,29 @@
 
     // Tirar uma foto da câmera
     async function captureSnapshot() {
+      clearError();
       if (!webcam) {
-        alert("Primeiro abra a câmera!");
+        showError("Primeiro abra a câmera!");
         return;
       }
-      stopWebcam(); // parar loop
+      stopWebcam();
       const snapshotCanvas = document.getElementById("snapshot");
       const ctx = snapshotCanvas.getContext("2d");
       ctx.drawImage(webcam.canvas, 0, 0, 200, 200);
       snapshotCanvas.style.display = "block";
       document.getElementById("preview").style.display = "none";
 
-      const prediction = await model.predict(snapshotCanvas);
-      showResults(prediction);
+      try {
+        const prediction = await model.predict(snapshotCanvas);
+        showResults(prediction);
+      } catch (err) {
+        showError("Erro ao analisar a foto da câmera.");
+      }
     }
 
     // Mostrar resultados
     function showResults(prediction) {
+      clearError();
       let bestClass = prediction[0];
       for (let i = 1; i < prediction.length; i++) {
         if (prediction[i].probability > bestClass.probability) {
@@ -152,9 +198,9 @@
 
       document.getElementById("result").innerText = resultText;
 
-      // Mostrar probabilidades
       prediction.forEach((p, i) => {
-        labelContainer.childNodes[i].innerHTML = `${p.className}: ${(p.probability * 100).toFixed(1)}%`;
+        labelContainer.childNodes[i].innerHTML =
+          `${p.className}: ${(p.probability * 100).toFixed(1)}%`;
       });
     }
   </script>
